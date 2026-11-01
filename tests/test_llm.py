@@ -1,4 +1,6 @@
 import json
+import socket
+import ssl
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -231,6 +233,7 @@ def test_timeout_and_expired_endpoint_hide_network_details(monkeypatch):
         def open(self, *args, **kwargs):
             raise failure
     monkeypatch.setattr(tronclass.llm, "build_opener", lambda *args: Opener())
+    monkeypatch.setattr(tronclass.llm, "getproxies", dict)
     client = OllamaClient(Settings(base_url="https://private-fixture.invalid/v1"), api_key="fake-key")
     for failure, hint in [(socket.timeout("fake-key"), "逾時"),
                           (URLError("https://private-fixture.invalid/v1 fake-key"), "入口")]:
@@ -238,6 +241,32 @@ def test_timeout_and_expired_endpoint_hide_network_details(monkeypatch):
             client.list_models()
         rendered = "".join(traceback.format_exception(error.value))
         assert "fake-key" not in rendered and "private-fixture" not in rendered
+
+
+@pytest.mark.parametrize("reason,proxies,hint", [
+    (socket.gaierror(11001, "getaddrinfo failed fake-key"), {}, "DNS"),
+    (ssl.SSLCertVerificationError(1, "certificate verify failed fake-key"), {}, "憑證"),
+    (ssl.SSLError(1, "wrong version fake-key"), {}, "HTTPS"),
+    (ConnectionRefusedError(10061, "refused fake-key"), {}, "拒絕"),
+    (ConnectionRefusedError(10061, "refused fake-key"), {"https": "http://127.0.0.1:7890"}, "代理"),
+])
+def test_connection_failures_name_the_cause_without_details(monkeypatch, reason, proxies, hint):
+    # Each tester's machine fails differently; the message must say which way, not echo details.
+    import traceback
+    from urllib.error import URLError
+    import tronclass.llm
+    class Opener:
+        def open(self, *args, **kwargs):
+            raise URLError(reason)
+    monkeypatch.setattr(tronclass.llm, "build_opener", lambda *args: Opener())
+    monkeypatch.setattr(tronclass.llm, "getproxies", lambda: proxies)
+    monkeypatch.setattr(tronclass.llm, "proxy_bypass", lambda host: False)
+    client = OllamaClient(Settings(base_url="https://private-fixture.invalid/v1"), api_key="fake-key")
+    with pytest.raises(ModelError, match=hint) as error:
+        client.list_models()
+    assert str(error.value).startswith("無法連線 Ollama")
+    rendered = "".join(traceback.format_exception(error.value))
+    assert "fake-key" not in rendered and "private-fixture" not in rendered and "7890" not in rendered
 
 
 @pytest.mark.parametrize("value,expected", [(None, "稍候"), ("fake-key https://private.invalid", "稍候"),

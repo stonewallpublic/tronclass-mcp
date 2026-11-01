@@ -100,6 +100,7 @@ API 閘道只做金鑰驗證、路徑保護與每分鐘頻率限制，不限制�
 | HTTP 429 | 按 `Retry-After` 等待；大量測試由負責人調高頻率 |
 | HTTP 404 | 確認網址含 `/v1`、入口未更換、路徑屬於允許的 API |
 | HTTP 502／530、DNS 或連線錯誤 | 檢查本機 Ollama、閘道與 Tunnel |
+| 「無法連線 Ollama」後面標示原因 | 錯誤會指出這台電腦的失敗類型，不顯示網址、金鑰或代理位址：**系統代理**（Python 會使用 Windows／環境變數代理，curl.exe 不會）請確認代理／VPN 軟體或關閉系統代理；**DNS** 請確認網址或換網路／DNS；**HTTPS 憑證**多為防毒或公司網路攔截，請關閉 HTTPS 掃描或換網路；**連線被拒絕**請確認 ollama serve 或目前入口 |
 | 模型繁忙、逾時或任務太長 | 檢查 GPU／Ollama、模型 context 與 client timeout；閘道不額外限制生成長度，Tunnel 自身限制仍適用 |
 
 ## Cloudflare → Claude

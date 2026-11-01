@@ -3,12 +3,13 @@
 import json
 import os
 import socket
+import ssl
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from urllib.error import HTTPError, URLError
 from urllib.parse import unquote, urlparse
-from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.request import HTTPRedirectHandler, Request, build_opener, getproxies, proxy_bypass
 
 from tronclass.config import Settings, cloudflare_token
 from tronclass.export_privacy import redact_connection
@@ -45,6 +46,24 @@ def retry_hint(value):
         return f"請等待 {seconds} 秒後再試。"
     except (TypeError, ValueError, OverflowError):
         return "請稍候再試。"
+
+
+def connection_hint(exc, base_url):
+    """Name the failure class so each tester can act on it; never echo the URL, key or proxy."""
+    reason = getattr(exc, "reason", exc)
+    url = urlparse(base_url)
+    # urllib follows the system proxy (environment or Windows settings); curl.exe does not.
+    if getproxies().get(url.scheme) and not proxy_bypass(url.hostname or ""):
+        return "這台電腦的 Python 使用系統代理伺服器連線但失敗；請確認代理／VPN 軟體正在執行，或關閉系統代理後重開介面。"
+    if isinstance(reason, socket.gaierror):
+        return "找不到主機（DNS）；請確認網址拼字與目前入口，或改用其他網路／DNS。"
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return "HTTPS 憑證驗證失敗；防毒軟體或公司網路可能攔截 HTTPS，請關閉 HTTPS 掃描或改用其他網路。"
+    if isinstance(reason, ssl.SSLError):
+        return "HTTPS 連線失敗；請關閉 VPN、代理或防毒 HTTPS 掃描後再試。"
+    if isinstance(reason, ConnectionRefusedError):
+        return "連線被拒絕；本機請確認 ollama serve 正在執行，遠端請確認目前入口。"
+    return "本機請確認 ollama serve；遠端請確認網路並向負責人取得目前入口。"
 
 
 def validate_ollama_connection(base_url, api_key=""):
@@ -117,7 +136,7 @@ class HttpModelClient:
                 raise ModelError("無法連線 Cloudflare，請確認網路與服務網址。") from None
             if isinstance(getattr(exc, "reason", None), (TimeoutError, socket.timeout)):
                 raise ModelError("模型回應逾時，請稍後重試。") from None
-            raise ModelError("無法連線 Ollama。本機請確認 ollama serve；遠端請確認網路並向負責人取得目前入口。") from None
+            raise ModelError(f"無法連線 Ollama。{connection_hint(exc, base)}") from None
         except (ValueError, UnicodeError) as exc:
             raise ModelError("模型服務未回傳有效 JSON，遠端入口可能失效，請確認目前入口。") from None
         if not isinstance(body, dict):
