@@ -68,6 +68,7 @@ def test_ui_output_budget_is_optional_and_changes_the_real_backend_settings(monk
     monkeypatch.setattr(tronclass.factory, "create_backend",
                         lambda settings, **kwargs: Backend(settings))
     app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=20).run()
+    app.selectbox(key="ollama_mode").select("本機 Ollama").run()
     assert not app.exception
     assert app.checkbox(key="limit_output_ollama").value is False
     app.chat_input[0].set_value("完整回答").run()
@@ -83,6 +84,7 @@ def test_ui_can_disable_a_previously_configured_2048_limit(monkeypatch):
     monkeypatch.setenv("OLLAMA_MODEL", "fixture")
     monkeypatch.setenv("LLM_MAX_TOKENS", "2048")
     app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=20).run()
+    app.selectbox(key="ollama_mode").select("本機 Ollama").run()
     assert app.checkbox(key="limit_output_ollama").value is True
     app.checkbox(key="limit_output_ollama").uncheck().run()
     assert not app.exception

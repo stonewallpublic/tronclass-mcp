@@ -222,6 +222,7 @@ def test_ui_greeting_does_not_call_model_and_thinking_choice_reaches_backend(mon
     monkeypatch.setenv("OLLAMA_MODEL", "fixture")
     monkeypatch.setattr(tronclass.llm, "create_model_client", lambda settings, **kwargs: Client(settings))
     app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=20).run()
+    app.selectbox(key="ollama_mode").select("本機 Ollama").run()
     assert not app.exception
     assert app.selectbox(key="thinking_ollama").value == "default"
     app.chat_input[0].set_value("你好").run()

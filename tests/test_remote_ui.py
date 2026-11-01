@@ -21,6 +21,23 @@ def widget(app, kind, label):
     return next(item for item in getattr(app, kind) if item.label == label)
 
 
+@pytest.mark.parametrize("configured", ["", "ollama", "cloudflare"])
+def test_page_opens_on_remote_ollama_without_contacting_anything(model_server, monkeypatch, configured):
+    # Testers should only paste the URL and key; config files keep driving the CLI, not the page.
+    url, state = model_server
+    monkeypatch.setenv("LLM_PROVIDER", configured)
+    monkeypatch.setenv("OLLAMA_BASE_URL", url)
+    monkeypatch.setenv("OLLAMA_API_KEY", "fake-env-must-not-be-used")
+    app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=20).run()
+    assert not app.exception and not app.error
+    assert app.selectbox(key="model_provider").value == "ollama"
+    assert app.selectbox(key="ollama_mode").value == "遠端 Ollama API"
+    assert widget(app, "text_input", "API base URL").value == ""
+    assert widget(app, "text_input", "API key").value == ""
+    assert app.chat_input[0].disabled
+    assert state["requests"] == []
+
+
 def test_remote_model_is_read_only_and_ignores_environment(monkeypatch):
     monkeypatch.setenv("OLLAMA_MODEL", "different-env-model")
     app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=20).run()
@@ -137,6 +154,7 @@ def test_model_picker_and_local_without_key(model_server, monkeypatch):
     monkeypatch.setenv("OLLAMA_MODEL", "fixture-model")
     monkeypatch.setenv("OLLAMA_API_KEY", "fake-env-ignored-by-ui")
     local = AppTest.from_file(str(ROOT / "app.py"), default_timeout=20).run()
+    widget(local, "selectbox", "Ollama 連線方式").select("本機 Ollama").run()
     widget(local, "button", "檢查連線").click().run()
     widget(local, "selectbox", "從模型清單選擇").select("fixture-model").run()
     assert widget(local, "text_input", "模型名稱").value == "fixture-model"

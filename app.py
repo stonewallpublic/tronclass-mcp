@@ -132,16 +132,11 @@ def choose_model():
 def main():
     st.title("📚 TronClass 課業助理")
     st.caption("System 1 · 單一模型讀取模擬課程資料，協助查詢跨課程資訊。")
-    try:
-        defaults = Settings.from_env()
-    except (ValueError, OSError) as exc:
-        st.error(f"設定有誤：{exc}")
-        st.stop()
-
     with st.sidebar:
         st.header("模型設定")
         providers = {"ollama": "Ollama", "cloudflare": "Cloudflare → Claude"}
-        provider = st.selectbox("模型服務", list(providers), index=list(providers).index(defaults.provider),
+        # The page always opens on remote Ollama; LLM_PROVIDER and [app] provider still drive the CLI.
+        provider = st.selectbox("模型服務", list(providers), index=0,
                                 format_func=providers.get, key="model_provider", on_change=invalidate_connection)
         try:
             defaults = Settings.from_env(provider=provider)
@@ -151,7 +146,7 @@ def main():
         api_key = ""  # UI never falls back to a process-wide Ollama credential.
         remote = False
         if provider == "ollama":
-            mode = st.selectbox("Ollama 連線方式", ["本機 Ollama", "遠端 Ollama API"],
+            mode = st.selectbox("Ollama 連線方式", ["本機 Ollama", "遠端 Ollama API"], index=1,
                                 key="ollama_mode", on_change=invalidate_connection)
             remote = mode == "遠端 Ollama API"
             mode_key = "remote" if remote else "local"

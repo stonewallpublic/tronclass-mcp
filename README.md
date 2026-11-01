@@ -27,8 +27,8 @@ $env:OLLAMA_MODEL = "填入 ollama list 顯示的完整名稱"
 
 #### 從 Streamlit 介面連線（建議）
 
-1. 依下方「啟動」建立 Python 虛擬環境、安裝套件，再執行 `.venv\Scripts\python.exe -m streamlit run app.py`。開啟 `http://localhost:8501`；這是你電腦上的介面，XAMPP 不負責啟動它。
-2. 左側「模型服務」選 **Ollama**，「Ollama 連線方式」選 **遠端 Ollama API**。底層仍使用 `provider=ollama`。
+1. 在專案資料夾**雙擊 `Start-App.bat`**。第一次會自動建立 `.venv` 並安裝套件（約一兩分鐘，需要網路與 Python 3.11 以上；沒有 Python 時視窗會提示下載位置），之後雙擊會直接開啟瀏覽器。介面只在你自己的電腦提供（`http://localhost:8501`，被占用時自動改用下一個 port），使用時保持黑色視窗開啟，關閉視窗即停止。啟動檔不讀取也不設定任何金鑰。熟悉指令者仍可依下方「啟動」手動執行；XAMPP 不負責啟動它。
+2. 頁面開啟時已預設「模型服務」**Ollama**、「Ollama 連線方式」**遠端 Ollama API**，不需另外點選；底層仍使用 `provider=ollama`。這個介面預設不受 `LLM_PROVIDER` 或 `[app] provider` 影響，這兩項設定仍用於 CLI／批次評估；要用本機 Ollama 或 Cloudflare 時在左側切換即可。
 3. 在 **API base URL** 貼上負責人提供的目前網址，必須包含 `/v1`，例如 `https://<目前入口>/v1`。遠端含金鑰連線必須使用 HTTPS；只有 localhost／loopback 可用 HTTP。網址不可包含金鑰、帳密或 query string。
 4. 在遮蔽的 **API key** 欄位輸入負責人私下提供的金鑰（公開示例：`fake-team-key-do-not-use`）。金鑰只留在目前 Streamlit session，不會存檔或修改全域環境變數；介面不會自動讀取 `OLLAMA_API_KEY`。
 5. **模型名稱** 唯讀顯示 `tronclass-system1:latest`，遠端模式沒有模型輸入框或下拉選單，一般組員只需設定 API 網址與 API key。按 **檢查連線** 後會查詢 `/models` 並確認該模型存在；不存在就顯示明確錯誤，不會改用其他模型。畫面 rerun 不會自動查詢清單。
@@ -267,7 +267,7 @@ System 2 可新增獨立 Coordinator，實作 `AssistantBackend.answer()` 後調
 |---|---|
 | `TRONCLASS_DB_PATH` | `sample_data/course.db`，相對路徑以專案根目錄起算 |
 | `TRONCLASS_STUDENT_ID` | `S11200001` |
-| `LLM_PROVIDER` | `ollama`，可由本機 `[app] provider` 選為 `cloudflare` |
+| `LLM_PROVIDER` | `ollama`，可由本機 `[app] provider` 選為 `cloudflare`；用於 CLI／批次評估，Streamlit 介面固定以遠端 Ollama 開啟 |
 | `OLLAMA_BASE_URL` | `http://localhost:11434/v1` |
 | `OLLAMA_MODEL` | 空白，需填已安裝的完整名稱 |
 | `OLLAMA_API_KEY` | CLI／批次使用，遠端閘道有金鑰保護時必填，不匯出；Streamlit 改用 session 密碼欄位 |

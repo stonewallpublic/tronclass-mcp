@@ -16,6 +16,7 @@ def test_chat_and_data_ui_share_backend_and_show_verification_state(monkeypatch)
     monkeypatch.setenv("OLLAMA_MODEL", "fixture")
     monkeypatch.setattr(tronclass.factory, "create_backend", lambda settings, **kwargs: Backend())
     app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=15).run()
+    app.selectbox(key="ollama_mode").select("本機 Ollama").run()
     assert not app.exception
     assert [metric.value for metric in app.metric] == ["4", "10", "14"]
     app.chat_input[0].set_value("資料結構作業三何時截止？").run()
@@ -34,6 +35,7 @@ def test_chat_and_data_ui_share_backend_and_show_verification_state(monkeypatch)
 def test_missing_model_still_allows_data_browsing(monkeypatch):
     monkeypatch.delenv("OLLAMA_MODEL", raising=False)
     app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=15).run()
+    app.selectbox(key="ollama_mode").select("本機 Ollama").run()
     assert not app.exception
     assert app.chat_input[0].disabled
     assert len(app.dataframe) == 1
@@ -42,6 +44,7 @@ def test_missing_model_still_allows_data_browsing(monkeypatch):
 def test_switching_to_cloudflare_keeps_data_available_and_clears_old_chat(monkeypatch):
     monkeypatch.setenv("OLLAMA_MODEL", "fixture")
     app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=15).run()
+    app.selectbox(key="ollama_mode").select("本機 Ollama").run()
     app.session_state["messages"] = [{"role": "assistant", "content": "先前本機模型回答"}]
     app.selectbox(key="model_provider").select("cloudflare").run()
     assert not app.exception
