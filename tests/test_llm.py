@@ -1,8 +1,11 @@
+import errno
+import http.client
 import json
 import socket
 import ssl
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.error import URLError
 
 import pytest
 
@@ -243,21 +246,32 @@ def test_timeout_and_expired_endpoint_hide_network_details(monkeypatch):
         assert "fake-key" not in rendered and "private-fixture" not in rendered
 
 
-@pytest.mark.parametrize("reason,proxies,hint", [
-    (socket.gaierror(11001, "getaddrinfo failed fake-key"), {}, "DNS"),
-    (ssl.SSLCertVerificationError(1, "certificate verify failed fake-key"), {}, "憑證"),
-    (ssl.SSLError(1, "wrong version fake-key"), {}, "HTTPS"),
-    (ConnectionRefusedError(10061, "refused fake-key"), {}, "拒絕"),
-    (ConnectionRefusedError(10061, "refused fake-key"), {"https": "http://127.0.0.1:7890"}, "代理"),
+class UnlistedNetworkError(OSError):
+    pass
+
+
+@pytest.mark.parametrize("failure,proxies,hint", [
+    (URLError(socket.gaierror(11001, "getaddrinfo failed fake-key")), {}, "DNS"),
+    (URLError(ssl.SSLCertVerificationError(1, "certificate verify failed fake-key")), {}, "憑證"),
+    (URLError(ssl.SSLError(1, "wrong version fake-key")), {}, "HTTPS"),
+    (URLError(ConnectionRefusedError(10061, "refused fake-key")), {}, "拒絕"),
+    (URLError(ConnectionRefusedError(10061, "refused fake-key")), {"https": "http://127.0.0.1:7890"}, "代理"),
+    (URLError(ConnectionResetError(10054, "reset fake-key")), {}, "中斷"),
+    (URLError(ConnectionAbortedError(10053, "aborted fake-key")), {}, "中斷"),
+    # urllib lets errors from reading the response escape unwrapped.
+    (http.client.RemoteDisconnected("closed fake-key"), {}, "中斷"),
+    (URLError(OSError(errno.ENETUNREACH, "unreachable fake-key")), {}, "網路無法到達"),
+    (URLError(OSError(errno.EHOSTUNREACH, "unreachable fake-key")), {}, "網路無法到達"),
+    (URLError(OSError(getattr(errno, "WSAEACCES", 10013), "forbidden fake-key")), {}, "防火牆"),
+    (URLError(UnlistedNetworkError(1, "odd fake-key")), {}, "UnlistedNetworkError"),
 ])
-def test_connection_failures_name_the_cause_without_details(monkeypatch, reason, proxies, hint):
+def test_connection_failures_name_the_cause_without_details(monkeypatch, failure, proxies, hint):
     # Each tester's machine fails differently; the message must say which way, not echo details.
     import traceback
-    from urllib.error import URLError
     import tronclass.llm
     class Opener:
         def open(self, *args, **kwargs):
-            raise URLError(reason)
+            raise failure
     monkeypatch.setattr(tronclass.llm, "build_opener", lambda *args: Opener())
     monkeypatch.setattr(tronclass.llm, "getproxies", lambda: proxies)
     monkeypatch.setattr(tronclass.llm, "proxy_bypass", lambda host: False)
