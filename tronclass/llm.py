@@ -1,5 +1,6 @@
 """Model adapters. Credentials never enter public settings or result metadata."""
 
+import errno
 import json
 import os
 import socket
@@ -63,7 +64,16 @@ def connection_hint(exc, base_url):
         return "HTTPS 連線失敗；請關閉 VPN、代理或防毒 HTTPS 掃描後再試。"
     if isinstance(reason, ConnectionRefusedError):
         return "連線被拒絕；本機請確認 ollama serve 正在執行，遠端請確認目前入口。"
-    return "本機請確認 ollama serve；遠端請確認網路並向負責人取得目前入口。"
+    if isinstance(reason, (ConnectionResetError, ConnectionAbortedError)):
+        return "連線被中途中斷；通常是 VPN、防毒軟體或防火牆切斷連線，請暫時關閉後重試或改用其他網路。"
+    code = getattr(reason, "errno", None)
+    if code in {errno.ENETUNREACH, errno.EHOSTUNREACH}:
+        return "網路無法到達；請確認這台電腦已連上網際網路，或關閉 VPN 後再試。"
+    if code in {errno.EACCES, getattr(errno, "WSAEACCES", 10013)}:
+        return "防火牆或安全軟體禁止 Python 連線；請允許 Python 存取網路後再試。"
+    # Name only the exception class: it identifies the failure without echoing any details.
+    kind = f"（{type(reason).__name__}）" if isinstance(reason, BaseException) else ""
+    return f"原因未能判定{kind}；本機請確認 ollama serve，遠端請確認網路並向負責人取得目前入口。"
 
 
 def validate_ollama_connection(base_url, api_key=""):
