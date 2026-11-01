@@ -21,13 +21,13 @@ $env:OLLAMA_MODEL = "填入 ollama list 顯示的完整名稱"
 
 ## 共用學校虛擬機的 Ollama API
 
-組員在自己的電腦執行本專案，SQLite 查詢、Streamlit 介面與 Python 流程仍在組員電腦；模型推論透過 API 交給學校虛擬機的 GPU。組員不用安裝 Ollama、下載模型、安裝 Tailscale 或登入 Cloudflare。
+組員在自己的電腦執行本專案，SQLite 查詢、Streamlit 介面與 Python 流程仍在組員電腦；模型推論透過 API 交給學校虛擬機的 GPU。組員只需啟動自己的網頁介面；Ollama、API 閘道與 Tunnel 由虛擬機負責人維持運作。組員不用安裝 Ollama、下載模型、安裝 Tailscale 或登入 Cloudflare。
 
 ### 組員設定
 
 #### 從 Streamlit 介面連線（建議）
 
-1. 在專案資料夾**雙擊 `Start-App.bat`**。第一次會自動建立 `.venv` 並安裝套件（約一兩分鐘，需要網路與 Python 3.11 以上；沒有 Python 時視窗會提示下載位置），之後雙擊會直接開啟瀏覽器。介面只在你自己的電腦提供（`http://localhost:8501`，被占用時自動改用下一個 port），使用時保持黑色視窗開啟，關閉視窗即停止。啟動檔不讀取也不設定任何金鑰。熟悉指令者仍可依下方「啟動」手動執行；XAMPP 不負責啟動它。
+1. 在自己電腦的專案資料夾**雙擊 `Start-App.bat`**。第一次會自動建立 `.venv` 並安裝套件（約一兩分鐘，需要網路與 Python 3.11 以上；沒有 Python 時視窗會提示下載位置），之後雙擊會直接開啟瀏覽器。介面只在你自己的電腦提供：優先使用 `http://localhost:8501`，連接埠被占用時依序改用 8502、8503 等，以視窗顯示並自動開啟的實際網址為準。使用時保持黑色視窗開啟，關閉視窗即停止。啟動檔不讀取也不設定任何金鑰。熟悉指令者仍可依下方「啟動」手動執行；XAMPP 不負責啟動它。若透過有網路限制的執行環境啟動，外連仍會受該環境限制，請回到自己電腦直接雙擊啟動。
 2. 頁面開啟時已預設「模型服務」**Ollama**、「Ollama 連線方式」**遠端 Ollama API**，不需另外點選；底層仍使用 `provider=ollama`。這個介面預設不受 `LLM_PROVIDER` 或 `[app] provider` 影響，這兩項設定仍用於 CLI／批次評估；要用本機 Ollama 或 Cloudflare 時在左側切換即可。
 3. 在 **API base URL** 貼上負責人提供的目前網址，必須包含 `/v1`，例如 `https://<目前入口>/v1`。遠端含金鑰連線必須使用 HTTPS；只有 localhost／loopback 可用 HTTP。網址不可包含金鑰、帳密或 query string。
 4. 在遮蔽的 **API key** 欄位輸入負責人私下提供的金鑰（公開示例：`fake-team-key-do-not-use`）。金鑰只留在目前 Streamlit session，不會存檔或修改全域環境變數；介面不會自動讀取 `OLLAMA_API_KEY`。
@@ -63,7 +63,7 @@ $env:OLLAMA_API_KEY = $apiCredential.GetNetworkCredential().Password
 Invoke-RestMethod "$env:OLLAMA_BASE_URL/models" -Headers @{Authorization = "Bearer $env:OLLAMA_API_KEY"}
 ```
 
-以上環境設定保留給 CLI／批次評估使用；Streamlit 請依上方介面步驟輸入網址與金鑰，再按「檢查連線」。`localhost:8501` 是組員自己的介面，不是虛擬機 API。程式會在模型清單與問答請求都加上 `Authorization: Bearer ...`；CLI 金鑰從環境讀取，介面金鑰由目前 session 注入，不放入 `Settings`、模型 metadata 或匯出紀錄。本機無驗證的 Ollama 不需要金鑰。
+以上環境設定保留給 CLI／批次評估使用；Streamlit 請依上方介面步驟輸入網址與金鑰，再按「檢查連線」。啟動器開啟的 `localhost` 網址是組員自己的介面，不是虛擬機 API；連接埠以啟動視窗顯示為準。程式會在模型清單與問答請求都加上 `Authorization: Bearer ...`；CLI 金鑰從環境讀取，介面金鑰由目前 session 注入，不放入 `Settings`、模型 metadata 或匯出紀錄。本機無驗證的 Ollama 不需要金鑰。
 
 即使入口使用 Cloudflare Tunnel，`LLM_PROVIDER` 仍是 `ollama`；下方「Cloudflare → Claude」是另一種由雲端模型運算、使用不同憑證與計費的服務。
 
@@ -127,21 +127,19 @@ Cloudflare 模式每次送出 `cf-aig-skip-cache: true`，避免批次重複測�
 
 ## 啟動
 
-需要 Python 3.11 以上。使用本機 Ollama 時需另行安裝、啟動服務；共用遠端模型的組員依上方步驟設定即可；使用 Cloudflare 時依上方設定。資料查詢頁不需要模型服務。在專案根目錄執行（PowerShell）：
+需要 Python 3.11 以上。共用遠端模型的組員建議依上方步驟雙擊啟動；熟悉指令者也可在自己電腦的一般 PowerShell 手動執行。資料查詢頁不需要模型服務。在專案根目錄執行：
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-
-# 由團隊選定並安裝模型；程式不會自動下載大型模型。
-ollama list
-$env:OLLAMA_MODEL = "填入已安裝模型的完整名稱與 tag"
-.venv\Scripts\python.exe -m streamlit run app.py
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m streamlit run app.py --server.address localhost --server.port 8501 --server.headless true
 ```
 
-若本機尚未啟動 Ollama，可另外開終端機執行 `ollama serve`；已在背景執行時不必重複啟動。左側「檢查連線」會查詢可用模型。連線失敗會顯示錯誤，不會產生假的 AI 回答。
+手動指令中的 `--server.port 8501` 對應 `http://localhost:8501`；若連接埠被占用，可改成 `--server.port 8502`，並改開 `http://localhost:8502`。雙擊啟動器會自動選擇可用連接埠。使用期間保持 PowerShell 視窗開啟。
 
-開啟 `http://localhost:8501`：
+使用遠端 Ollama 時，在頁面填入提供的 API 網址與金鑰，再按「檢查連線」。只有選擇「本機 Ollama」時，才需要在這台電腦安裝並啟動 Ollama：先以 `ollama list` 確認模型，必要時執行 `ollama serve`，再於頁面選擇模型。使用 Cloudflare 時依上方設定。連線失敗會顯示錯誤，不會產生假的 AI 回答。要執行開發測試時另安裝 `requirements-dev.txt`。
+
+開啟實際啟動的本機網址後：
 
 - **課業問答**：多輪對話、模型／耗時／未驗證狀態、對話與執行紀錄匯出。
 - **資料查詢**：依課程篩選公告、作業、教材與附件文字、個人成績、測驗、點名等。設定、資料或 prompt 改變會重開對話，避免混用舊設定。

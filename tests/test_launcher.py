@@ -1,5 +1,9 @@
-"""Static guards for the double-click launcher; nothing here starts a process."""
+"""Launcher guards and loopback port checks; never starts the app or browser."""
 import re
+import shutil
+import subprocess
+
+import pytest
 
 from tronclass.config import ROOT
 
@@ -36,3 +40,45 @@ def test_launcher_never_touches_credentials_or_machine_paths():
         assert secret not in text
     assert not re.search(r"\$env:\w+\s*=", text)
     assert not re.search(r"[A-Za-z]:\\Users", text)
+
+
+@pytest.mark.parametrize("address", ["127.0.0.1", "::1"])
+def test_launcher_skips_a_port_occupied_by_a_loopback_listener(address):
+    powershell = shutil.which("powershell.exe")
+    if not powershell:
+        pytest.skip("The Windows launcher requires Windows PowerShell.")
+    script_path = str(SCRIPT).replace("'", "''")
+    command = r"""
+$ErrorActionPreference = 'Stop'
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile('__SCRIPT__', [ref]$tokens, [ref]$errors)
+foreach ($name in @('Test-AppPortAvailable', 'Get-AppPort')) {
+    $definition = $ast.Find({ param($node)
+        $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name
+    }, $true)
+    if (-not $definition) { throw "Missing launcher function: $name" }
+    . ([scriptblock]::Create($definition.Extent.Text))
+}
+$address = [Net.IPAddress]::Parse('__ADDRESS__')
+if (-not ([Net.Dns]::GetHostAddresses('localhost') | Where-Object { $_.Equals($address) })) { exit 77 }
+$listener = New-Object Net.Sockets.TcpListener($address, 0)
+$listener.Server.ExclusiveAddressUse = $true
+try {
+    $listener.Start()
+    $port = $listener.LocalEndpoint.Port
+    if (Test-AppPortAvailable -Port $port) { throw 'An occupied port was reported as available.' }
+    $selected = Get-AppPort -StartPort $port
+    if ($selected -le $port) { throw 'The launcher did not advance beyond the occupied port.' }
+    if (-not (Test-AppPortAvailable -Port $selected)) { throw 'The selected replacement port is unavailable.' }
+} finally { $listener.Stop() }
+if (-not (Test-AppPortAvailable -Port $port)) { throw 'The released port was not reusable.' }
+""".replace("__SCRIPT__", script_path).replace("__ADDRESS__", address)
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-Command", command],
+        capture_output=True, text=True, timeout=20,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if result.returncode == 77:
+        pytest.skip("This loopback address is not used by localhost on this machine.")
+    assert result.returncode == 0, result.stdout + result.stderr

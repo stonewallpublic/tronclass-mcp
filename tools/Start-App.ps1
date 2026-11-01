@@ -13,6 +13,34 @@ function Test-Python([string]$Command, [string[]]$Arguments) {
     } catch { return $false }
 }
 
+function Test-AppPortAvailable([int]$Port) {
+    # Listener inventories can omit ports owned by another process or execution environment.
+    # Test the addresses Streamlit will actually bind, and never probe a public interface.
+    $listeners = @()
+    try {
+        foreach ($address in [Net.Dns]::GetHostAddresses('localhost')) {
+            $listener = New-Object Net.Sockets.TcpListener($address, $Port)
+            $listeners += $listener
+            $listener.Server.ExclusiveAddressUse = $true
+            $listener.Start()
+        }
+        return $true
+    } catch [Net.Sockets.SocketException] {
+        if ($_.Exception.SocketErrorCode -notin @([Net.Sockets.SocketError]::AddressAlreadyInUse,
+                                                [Net.Sockets.SocketError]::AccessDenied)) { throw }
+        return $false
+    } finally {
+        foreach ($listener in $listeners) { $listener.Stop() }
+    }
+}
+
+function Get-AppPort([int]$StartPort = 8501) {
+    for ($port = $StartPort; $port -le 65535; $port++) {
+        if (Test-AppPortAvailable -Port $port) { return $port }
+    }
+    throw '找不到可用的本機連接埠，請關閉其他介面後再試。'
+}
+
 try {
     if (-not (Test-Path -LiteralPath $venvPython)) {
         $candidates = @(@{Command = 'py'; Arguments = @('-3')}, @{Command = 'python'; Arguments = @()})
@@ -48,9 +76,7 @@ try {
         Set-Content -LiteralPath $marker -Value $wanted -Encoding ascii
     }
 
-    $busy = @([Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().GetActiveTcpListeners() | ForEach-Object Port)
-    $port = 8501
-    while ($busy -contains $port) { $port++ }
+    $port = Get-AppPort
     $url = "http://localhost:$port"
     # Headless skips Streamlit's first-run email prompt; localhost keeps the page off the network.
     $streamlitArguments = @('-m', 'streamlit', 'run', 'app.py', '--server.address', 'localhost',
@@ -60,11 +86,16 @@ try {
     $ready = $false
     for ($attempt = 0; $attempt -lt 60 -and -not $app.HasExited; $attempt++) {
         $probe = New-Object Net.Sockets.TcpClient
-        try { $probe.Connect('localhost', $port); $ready = $true; break }
+        try {
+            $probe.Connect('localhost', $port)
+            $app.Refresh()
+            if (-not $app.HasExited) { $ready = $true; break }
+        }
         catch { Start-Sleep -Milliseconds 500 }
         finally { $probe.Close() }
     }
-    if (-not $ready) {
+    $app.Refresh()
+    if (-not $ready -or $app.HasExited) {
         if (-not $app.HasExited) { Stop-Process -Id $app.Id }
         throw '介面沒有成功啟動，請查看上方訊息。'
     }
